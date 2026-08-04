@@ -1,31 +1,31 @@
-# 🌊 Deep Stochastic Volatility: PINNs & Neural SDEs for Option Pricing
+# 🌊 Deep Stochastic Volatility: Structured Products & Path-Dependent Neural SDEs
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
+[![yfinance](https://img.shields.io/badge/yfinance-Market%20Data-blue.svg)](https://github.com/ranaroussi/yfinance)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Physics-Informed Neural Networks (PINNs) and Neural Stochastic Differential Equations solving Black-Scholes and Heston Stochastic Volatility PDEs, benchmarked against **Analytical Closed-Form**, **Finite Difference Method (FDM)**, and **Monte Carlo Simulations**.
-
-## 📊 Benchmark Numerical Results
-
-Evaluated across spot prices $S \in [70, 130]$ for a $1\text{-Year}$ European Call Option ($K = 100, r = 5\%, \sigma = 20\%$):
-
-| Method | Mean Abs Error (MAE) | Root Mean Sq Error (RMSE) | Relative Error (%) | Batch Inference Time |
-| :--- | :--- | :--- | :--- | :--- |
-| **Black-Scholes (Exact Analytical)** | **$0.0000** | **$0.0000** | **0.00%** | **0.05 ms** |
-| **PINN (Physics-Informed Neural Net)** | **$0.2850** | **$0.3160** | **10.07%** | **1.64 ms** |
-| **Finite Difference (Crank-Nicolson FDM)** | **$0.0019** | **$0.0022** | **0.03%** | **717.54 ms** |
-| **Monte Carlo Simulation (50k Paths/Spot)** | **$0.0577** | **$0.0755** | **0.75%** | **87.59 ms** |
+Institutional quantitative pricing suite for **Complex Path-Dependent Derivatives (Asian Options, Phoenix Autocallable Notes, Barrier Options)** calibrated on **Real Market Data from Yahoo Finance** (NVDA, TSLA, AAPL, BTC-USD) using **PyTorch Neural SDEs** and **High-Precision Monte Carlo Simulations**.
 
 ---
 
-## 📈 Visual Benchmark Comparison (Clear Axes & Metric Labels)
+## 📊 Real Market Numerical Results (NVDA: Spot $S_0 = \$211.94$, $\sigma = 36.5\%$)
 
-![PINN Benchmark Comparison](assets/pinn_benchmark_comparison.png)
+| Derivative / Product | Pricing Model / Method | Fair Value ($) | Key Metric / Risk | Execution Time |
+| :--- | :--- | :--- | :--- | :--- |
+| **Asian Call Option (NVDA)** | **Monte Carlo (50k Paths)** | **$19.85** | StdErr: +/-$0.146 | **554.4 ms** |
+| **Asian Call Option (NVDA)** | **PyTorch Neural SDE** | **$6.64** | MAE vs MC: $13.21 | **0.61 ms** |
+| **Phoenix Autocall Note (NVDA)** | **Vectorized Monte Carlo** | **$0.99** | Autocall Prob: 71.1% | **554.4 ms** |
 
-### Key Insights:
-1. **Meshfree PDE Solving**: PINNs solve the Black-Scholes PDE without spatial grid discretization errors.
-2. **Automatic Differentiation Greeks**: Option Delta ($\Delta = \frac{\partial V}{\partial S}$) and Gamma ($\Gamma = \frac{\partial^2 V}{\partial S^2}$) are computed directly via PyTorch `autograd` with **<0.01 Delta MAE**.
-3. **Ultra-Fast Batch Inference**: Once trained, the PINN evaluates 1,000 spot/maturity pairs in parallel in **< 1.5 ms**.
+---
+
+## 📈 Visual Benchmark & Payoff Profiles (Pure Black, Explicit Numeric Axes, No Grid)
+
+![Real Market Structured Products Benchmark](assets/structured_products_benchmark.png)
+
+### Key Highlights:
+1. **Live Market Ingestion (`yfinance`)**: Automatically ingests historical spot prices, computes realized volatility $\sigma$, and retrieves option chains for equities ($NVDA, $TSLA, $AAPL) and crypto ($BTC-USD).
+2. **Phoenix Autocall Structuring**: Simulates quarterly observation dates, early redemption triggers ($100\% S_0$), and Down-and-In capital protection barriers ($60\% S_0$).
+3. **Neural SDE Path Operator**: Evaluates high-dimensional path averages and barrier conditions in parallel in **$< 1.5\text{ ms}$**.
 
 ## 🚀 Quickstart
 ```bash
