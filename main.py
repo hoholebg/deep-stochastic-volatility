@@ -1,23 +1,37 @@
+import time
 import torch
+import numpy as np
+import pandas as pd
+from src.analytical import bs_call_price, bs_call_delta
+from src.fdm_solver import fdm_black_scholes
 from src.pinn_solver import BlackScholesPINN
 
 def main():
-    print("=== PyTorch Physics-Informed Neural Networks (PINNs) Option Pricing ===")
+    print("=== Deep Stochastic Volatility: PINN vs Analytical vs FDM Benchmark ===")
     
-    model = BlackScholesPINN(hidden_dim=32)
-    
-    # Sample inputs (Stock price S = 100, Time t = 0.5 years)
-    S = torch.tensor([[100.0], [105.0], [95.0]], requires_grad=True)
-    t = torch.tensor([[0.5], [0.5], [0.5]], requires_grad=True)
-    
-    predicted_prices = model(S, t)
-    residuals = model.pde_residual(S, t)
+    K, T, r, sigma = 100.0, 1.0, 0.05, 0.20
+    model = BlackScholesPINN(hidden_dim=64)
 
-    print("Predicted Option Prices V(S, t):")
-    for s_val, price in zip(S.detach().numpy().flatten(), predicted_prices.detach().numpy().flatten()):
-        print(f"  S = ${s_val:.1f} -> NN Option Value = ${price:.4f}")
-        
-    print(f"\nMean PDE Residual Loss: {torch.mean(residuals**2).item():.6e}")
+    S_test = np.array([80.0, 90.0, 100.0, 110.0, 120.0])
+    S_torch = torch.tensor(S_test, dtype=torch.float32).unsqueeze(1).requires_grad_(True)
+    tau_torch = torch.full((len(S_test), 1), T, dtype=torch.float32).requires_grad_(True)
+
+    bs_prices = bs_call_price(S_test, K, T, r, sigma)
+    bs_deltas = bs_call_delta(S_test, K, T, r, sigma)
+
+    _, pinn_deltas_t, _ = model.pde_residual(S_torch, tau_torch, K, r, sigma)
+    pinn_prices_t = model(S_torch, tau_torch)
+
+    df = pd.DataFrame({
+        "Spot (S)": S_test,
+        "Exact BS Price ($)": np.round(bs_prices, 4),
+        "Exact BS Delta": np.round(bs_deltas, 4),
+        "PINN Price ($)": np.round(pinn_prices_t.detach().numpy().flatten(), 4),
+        "PINN Autograd Delta": np.round(pinn_deltas_t.detach().numpy().flatten(), 4)
+    })
+
+    print("\nBenchmark Evaluation Grid:")
+    print(df.to_string(index=False))
 
 if __name__ == "__main__":
     main()
