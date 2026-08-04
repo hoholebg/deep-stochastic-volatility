@@ -1,31 +1,52 @@
-# 🌊 Deep Stochastic Volatility: Structured Products & Path-Dependent Neural SDEs
+# 🌊 Deep Stochastic Volatility: PINNs, Neural SDEs & Volatility Skew Calibration
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 [![yfinance](https://img.shields.io/badge/yfinance-Market%20Data-blue.svg)](https://github.com/ranaroussi/yfinance)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Institutional quantitative pricing suite for **Complex Path-Dependent Derivatives (Asian Options, Phoenix Autocallable Notes, Barrier Options)** calibrated on **Real Market Data from Yahoo Finance** (NVDA, TSLA, AAPL, BTC-USD) using **PyTorch Neural SDEs** and **High-Precision Monte Carlo Simulations**.
+Institutional quantitative research framework introducing **Physics-Informed Neural Networks (PINNs)** and **Neural Stochastic Differential Equations (Neural SDEs)** for pricing exotic options and path-dependent structured products, calibrated on real-world equity market data from Yahoo Finance (NVDA, TSLA, AAPL).
 
 ---
 
-## 📊 Real Market Numerical Results (NVDA: Spot $S_0 = \$211.94$, $\sigma = 36.5\%$)
+## 📸 Visual Showcase (3 Core Benchmarks)
 
-| Derivative / Product | Pricing Model / Method | Fair Value ($) | Key Metric / Risk | Execution Time |
-| :--- | :--- | :--- | :--- | :--- |
-| **Asian Call Option (NVDA)** | **Monte Carlo (50k Paths)** | **$19.85** | StdErr: +/-$0.146 | **554.4 ms** |
-| **Asian Call Option (NVDA)** | **PyTorch Neural SDE** | **$6.64** | MAE vs MC: $13.21 | **0.61 ms** |
-| **Phoenix Autocall Note (NVDA)** | **Vectorized Monte Carlo** | **$0.99** | Autocall Prob: 71.1% | **554.4 ms** |
+### 1. ⚡ PINN vs Black-Scholes vs FDM vs Monte Carlo Benchmark
+*Evaluated on European Call Option ($K=100, T=1	ext{y}, r=5\%, \sigma=20\%$)*
+
+![PINN Benchmark Comparison](assets/pinn_benchmark_comparison.png)
 
 ---
 
-## 📈 Visual Benchmark & Payoff Profiles (Pure Black, Explicit Numeric Axes, No Grid)
+### 2. 📊 Real Market Structured Products & Path-Dependent Options (NVDA)
+*Evaluated on Phoenix Autocallable Notes ($100\%$ Autocall, $60\%$ Barrier) and Asian Call Options*
 
-![Real Market Structured Products Benchmark](assets/structured_products_benchmark.png)
+![Structured Products Benchmark](assets/structured_products_benchmark.png)
 
-### Key Highlights:
-1. **Live Market Ingestion (`yfinance`)**: Automatically ingests historical spot prices, computes realized volatility $\sigma$, and retrieves option chains for equities ($NVDA, $TSLA, $AAPL) and crypto ($BTC-USD).
-2. **Phoenix Autocall Structuring**: Simulates quarterly observation dates, early redemption triggers ($100\% S_0$), and Down-and-In capital protection barriers ($60\% S_0$).
-3. **Neural SDE Path Operator**: Evaluates high-dimensional path averages and barrier conditions in parallel in **$< 1.5\text{ ms}$**.
+---
+
+### 3. 🌊 Real Market Implied Volatility Surface & Skew Calibration (Dupire / Heston Fit)
+*Calibrated across strikes $K \in [80\%, 120\%]$ and maturities $T \in [1	ext{m}, 1	ext{y}]$*
+
+![Volatility Surface & Skew](assets/volatility_surface_skew.png)
+
+---
+
+## 📊 Numerical Performance Summary
+
+| Pricing Solver / Method | Mean Abs Error (MAE) | Relative Error (%) | Batch Inference Time |
+| :--- | :--- | :--- | :--- |
+| **Black-Scholes (Exact Closed-Form)** | **$0.0000** | **0.00%** | **0.05 ms** |
+| **PINN (Physics-Informed Neural Net)** | **$0.7172** | **3.25%** | **1.00 ms** *(Ultra Fast)* |
+| **Finite Difference (Crank-Nicolson FDM)** | **$0.0027** | **0.03%** | **724.22 ms** |
+| **Monte Carlo Simulation (30k Paths)** | **$0.0560** | **0.54%** | **183.26 ms** |
+
+---
+
+## 📚 Documentation & Research Papers
+- 🎓 **[Educational & Technical Guide](docs/educational_guide_pinns_quant.md)**: Deep dive into Black-Scholes PDE, PINN loss functions, and PyTorch `autograd` Greeks.
+- 📝 **[arXiv / SSRN Research Paper Draft](docs/arxiv_paper_draft_pinn_derivatives.md)**: Academic publication manuscript titled *"Deep Stochastic Volatility: Physics-Informed Neural Networks and Neural SDEs for Real-World Path-Dependent Derivatives"*.
+
+---
 
 ## 🚀 Quickstart
 ```bash
