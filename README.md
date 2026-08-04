@@ -12,13 +12,13 @@ Evaluated across spot prices $S \in [70, 130]$ for a $1\text{-Year}$ European Ca
 | Method | Mean Abs Error (MAE) | Root Mean Sq Error (RMSE) | Relative Error (%) | Batch Inference Time |
 | :--- | :--- | :--- | :--- | :--- |
 | **Black-Scholes (Exact Analytical)** | **$0.0000** | **$0.0000** | **0.00%** | **0.05 ms** |
-| **PINN (Physics-Informed Neural Net)** | **$0.2627** | **$0.3095** | **6.72%** | **1.00 ms** |
-| **Finite Difference (Crank-Nicolson FDM)** | **$0.0019** | **$0.0022** | **0.03%** | **724.22 ms** |
-| **Monte Carlo Simulation (50k Paths/Spot)** | **$0.0443** | **$0.0597** | **0.63%** | **84.57 ms** |
+| **PINN (Physics-Informed Neural Net)** | **$0.2850** | **$0.3160** | **10.07%** | **1.64 ms** |
+| **Finite Difference (Crank-Nicolson FDM)** | **$0.0019** | **$0.0022** | **0.03%** | **717.54 ms** |
+| **Monte Carlo Simulation (50k Paths/Spot)** | **$0.0577** | **$0.0755** | **0.75%** | **87.59 ms** |
 
 ---
 
-## 📈 Visual Benchmark Comparison
+## 📈 Visual Benchmark Comparison (Clear Axes & Metric Labels)
 
 ![PINN Benchmark Comparison](assets/pinn_benchmark_comparison.png)
 
