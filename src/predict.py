@@ -47,5 +47,5 @@ if __name__ == "__main__":
     res = predict_option_price_and_greeks(211.94, 1.0)
     print(f"\nInference Result for NVDA (S = 211.94, T = 1.0):")
     print(f"  Predicted Option Price V:  ${res['price']:.2f}")
-    print(f"  Exact Autograd Delta Δ:     {res['delta']:.4f}")
-    print(f"  Exact Autograd Gamma Γ:     {res['gamma']:.6f}")
+    print(f"  Exact Autograd Delta:       {res['delta']:.4f}")
+    print(f"  Exact Autograd Gamma:       {res['gamma']:.6f}")
