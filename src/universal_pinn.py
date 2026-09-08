@@ -58,10 +58,11 @@ class UniversalMultiAssetPINN(nn.Module):
         Infers option price V and exact Greeks (Delta, Gamma, Vega, Theta) via autograd.
         """
         self.eval()
+        device = next(self.parameters()).device
         m_val = S / K
-        m_t = torch.tensor([[m_val]], dtype=torch.float32, requires_grad=True)
-        tau_t = torch.tensor([[tau]], dtype=torch.float32, requires_grad=True)
-        sigma_t = torch.tensor([[sigma]], dtype=torch.float32, requires_grad=True)
+        m_t = torch.tensor([[m_val]], dtype=torch.float32, device=device, requires_grad=True)
+        tau_t = torch.tensor([[tau]], dtype=torch.float32, device=device, requires_grad=True)
+        sigma_t = torch.tensor([[sigma]], dtype=torch.float32, device=device, requires_grad=True)
 
         v = self.forward(m_t, tau_t, sigma_t)
         dv_dm = torch.autograd.grad(v, m_t, grad_outputs=torch.ones_like(v), create_graph=True)[0]

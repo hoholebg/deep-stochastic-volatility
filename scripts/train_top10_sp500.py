@@ -50,36 +50,41 @@ def train_universal_pinn(epochs: int = 5000):
     df_test = df_all.iloc[test_idx].copy()
     print(f"[+] Dataset Split: {len(df_train)} Train contracts | {len(df_test)} Out-of-Sample Test contracts")
 
-    # 3. Market Tensors (Train)
-    m_train = torch.tensor(df_train["moneyness"].values, dtype=torch.float32).unsqueeze(1)
-    tau_train = torch.tensor(df_train["tau"].values, dtype=torch.float32).unsqueeze(1)
-    sigma_train = torch.tensor(df_train["sigma"].values, dtype=torch.float32).unsqueeze(1)
-    v_train_target = torch.tensor(df_train["normalized_price"].values, dtype=torch.float32).unsqueeze(1)
+    # 3. Device Selection (CUDA on NVIDIA GTX 1070 if available)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+    print(f"[+] Execution Device: {device} ({gpu_name})")
+
+    # Market Tensors (Train)
+    m_train = torch.tensor(df_train["moneyness"].values, dtype=torch.float32, device=device).unsqueeze(1)
+    tau_train = torch.tensor(df_train["tau"].values, dtype=torch.float32, device=device).unsqueeze(1)
+    sigma_train = torch.tensor(df_train["sigma"].values, dtype=torch.float32, device=device).unsqueeze(1)
+    v_train_target = torch.tensor(df_train["normalized_price"].values, dtype=torch.float32, device=device).unsqueeze(1)
 
     # Market Tensors (Test)
-    m_test = torch.tensor(df_test["moneyness"].values, dtype=torch.float32).unsqueeze(1)
-    tau_test = torch.tensor(df_test["tau"].values, dtype=torch.float32).unsqueeze(1)
-    sigma_test = torch.tensor(df_test["sigma"].values, dtype=torch.float32).unsqueeze(1)
+    m_test = torch.tensor(df_test["moneyness"].values, dtype=torch.float32, device=device).unsqueeze(1)
+    tau_test = torch.tensor(df_test["tau"].values, dtype=torch.float32, device=device).unsqueeze(1)
+    sigma_test = torch.tensor(df_test["sigma"].values, dtype=torch.float32, device=device).unsqueeze(1)
 
     # 4. PDE Collocation Domain (Meshfree Dimensionless Space)
     N_pde = 4000
-    m_pde = torch.rand(N_pde, 1) * 0.9 + 0.60       # moneyness m in [0.60, 1.50]
-    tau_pde = torch.rand(N_pde, 1) * 1.20           # tau in [0.00, 1.20 years]
-    sigma_pde = torch.rand(N_pde, 1) * 0.45 + 0.15  # sigma in [0.15, 0.60]
+    m_pde = (torch.rand(N_pde, 1, device=device) * 0.9 + 0.60)       # moneyness m in [0.60, 1.50]
+    tau_pde = (torch.rand(N_pde, 1, device=device) * 1.20)           # tau in [0.00, 1.20 years]
+    sigma_pde = (torch.rand(N_pde, 1, device=device) * 0.45 + 0.15)  # sigma in [0.15, 0.60]
 
     # 5. Initial Condition Domain (Payoff at tau = 0)
     N_ic = 1000
-    m_ic = torch.rand(N_ic, 1) * 0.9 + 0.60
-    tau_ic = torch.zeros(N_ic, 1)
-    sigma_ic = torch.rand(N_ic, 1) * 0.45 + 0.15
+    m_ic = (torch.rand(N_ic, 1, device=device) * 0.9 + 0.60)
+    tau_ic = torch.zeros(N_ic, 1, device=device)
+    sigma_ic = (torch.rand(N_ic, 1, device=device) * 0.45 + 0.15)
     v_ic_target = torch.relu(m_ic - 1.0) # dimensionless call payoff: max(m - 1, 0)
 
     # 6. Initialize Model, Optimizer & Scheduler
-    model = UniversalMultiAssetPINN(hidden_dim=128)
+    model = UniversalMultiAssetPINN(hidden_dim=128).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
 
-    print(f"\n[INFO] Training Universal Multi-Asset PINN ({epochs} Epochs)...")
+    print(f"\n[INFO] Training Universal Multi-Asset PINN on {gpu_name} ({epochs} Epochs)...")
     t0 = time.time()
     loss_history = []
     pde_history = []
@@ -127,13 +132,13 @@ def train_universal_pinn(epochs: int = 5000):
     model.eval()
     with torch.no_grad():
         # Predict Train
-        v_pred_train = model(m_train, tau_train, sigma_train).squeeze().numpy()
+        v_pred_train = model(m_train, tau_train, sigma_train).squeeze().cpu().numpy()
         df_train["pred_norm_price"] = v_pred_train
         df_train["pred_price"] = df_train["pred_norm_price"] * df_train["K"]
         df_train["abs_error"] = np.abs(df_train["pred_price"] - df_train["market_price"])
 
         # Predict Out-of-Sample Test
-        v_pred_test = model(m_test, tau_test, sigma_test).squeeze().numpy()
+        v_pred_test = model(m_test, tau_test, sigma_test).squeeze().cpu().numpy()
         df_test["pred_norm_price"] = v_pred_test
         df_test["pred_price"] = df_test["pred_norm_price"] * df_test["K"]
         df_test["abs_error"] = np.abs(df_test["pred_price"] - df_test["market_price"])

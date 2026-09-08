@@ -59,38 +59,42 @@ def train_heston(epochs: int = 1500):
     r = 0.045        # Risk-free rate
     K = 100.0        # Reference strike
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+    print(f"[+] Execution Device: {device} ({gpu_name})")
+
     # 1. Collocation Points in Dimensionless Domain (m, v, tau)
     N_pde = 2000
-    m_pde = torch.rand(N_pde, 1) * 1.0 + 0.50        # m in [0.50, 1.50]
-    v_pde = torch.rand(N_pde, 1) * 0.15 + 0.01       # v in [0.01, 0.16] (vol 10% - 40%)
-    tau_pde = torch.rand(N_pde, 1) * 0.95 + 0.05     # tau in [0.05, 1.00]
+    m_pde = (torch.rand(N_pde, 1, device=device) * 1.0 + 0.50)        # m in [0.50, 1.50]
+    v_pde = (torch.rand(N_pde, 1, device=device) * 0.15 + 0.01)       # v in [0.01, 0.16] (vol 10% - 40%)
+    tau_pde = (torch.rand(N_pde, 1, device=device) * 0.95 + 0.05)     # tau in [0.05, 1.00]
 
     # 2. Initial Condition (tau = 0)
     N_ic = 600
-    m_ic = torch.rand(N_ic, 1) * 1.0 + 0.50
-    v_ic = torch.rand(N_ic, 1) * 0.15 + 0.01
-    tau_ic = torch.zeros(N_ic, 1)
+    m_ic = (torch.rand(N_ic, 1, device=device) * 1.0 + 0.50)
+    v_ic = (torch.rand(N_ic, 1, device=device) * 0.15 + 0.01)
+    tau_ic = torch.zeros(N_ic, 1, device=device)
     u_ic_target = torch.relu(m_ic - 1.0)              # Call payoff max(m - 1, 0)
 
     # 3. Boundary Conditions
     # Deep OTM boundary (m = 0.3) -> u = 0
     N_bc = 300
-    m_bc_lo = torch.ones(N_bc, 1) * 0.30
-    v_bc_lo = torch.rand(N_bc, 1) * 0.15 + 0.01
-    tau_bc_lo = torch.rand(N_bc, 1) * 1.0
-    u_bc_lo_target = torch.zeros(N_bc, 1)
+    m_bc_lo = torch.ones(N_bc, 1, device=device) * 0.30
+    v_bc_lo = (torch.rand(N_bc, 1, device=device) * 0.15 + 0.01)
+    tau_bc_lo = (torch.rand(N_bc, 1, device=device) * 1.0)
+    u_bc_lo_target = torch.zeros(N_bc, 1, device=device)
 
     # Deep ITM boundary (m = 1.8) -> u = m - exp(-r * tau)
-    m_bc_hi = torch.ones(N_bc, 1) * 1.80
-    v_bc_hi = torch.rand(N_bc, 1) * 0.15 + 0.01
-    tau_bc_hi = torch.rand(N_bc, 1) * 1.0
+    m_bc_hi = torch.ones(N_bc, 1, device=device) * 1.80
+    v_bc_hi = (torch.rand(N_bc, 1, device=device) * 0.15 + 0.01)
+    tau_bc_hi = (torch.rand(N_bc, 1, device=device) * 1.0)
     u_bc_hi_target = m_bc_hi - torch.exp(-r * tau_bc_hi)
 
-    model = HestonPINN(hidden_dim=128)
+    model = HestonPINN(hidden_dim=128).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1.5e-3, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
 
-    print(f"[INFO] Training Heston PINN ({epochs} Epochs)...")
+    print(f"[INFO] Training Heston PINN on {gpu_name} ({epochs} Epochs)...")
     t0 = time.time()
     loss_history = []
     pde_history = []
@@ -150,9 +154,9 @@ def train_heston(epochs: int = 1500):
         p_fourier = heston_analytical_call_price(s, K, tau_eval, r, v0_eval, kappa, theta, xi, rho)
         fourier_prices.append(p_fourier)
 
-        s_t = torch.tensor([[s / K]], dtype=torch.float32, requires_grad=True)
-        v_t = torch.tensor([[v0_eval]], dtype=torch.float32)
-        tau_t = torch.tensor([[tau_eval]], dtype=torch.float32)
+        s_t = torch.tensor([[s / K]], dtype=torch.float32, device=device, requires_grad=True)
+        v_t = torch.tensor([[v0_eval]], dtype=torch.float32, device=device)
+        tau_t = torch.tensor([[tau_eval]], dtype=torch.float32, device=device)
 
         u_pred = model(s_t, v_t, tau_t)
         p_pinn = u_pred.item() * K
@@ -183,9 +187,9 @@ def train_heston(epochs: int = 1500):
         for s in curve_spots:
             f_p = heston_analytical_call_price(s, K, tau_eval, r, v_val, kappa, theta, xi, rho)
             with torch.no_grad():
-                s_t = torch.tensor([[s / K]], dtype=torch.float32)
-                v_t = torch.tensor([[v_val]], dtype=torch.float32)
-                tau_t = torch.tensor([[tau_eval]], dtype=torch.float32)
+                s_t = torch.tensor([[s / K]], dtype=torch.float32, device=device)
+                v_t = torch.tensor([[v_val]], dtype=torch.float32, device=device)
+                tau_t = torch.tensor([[tau_eval]], dtype=torch.float32, device=device)
                 pred_p = model(s_t, v_t, tau_t).item() * K
             pinn_curve.append(pred_p)
             fourier_curve.append(f_p)
@@ -288,34 +292,38 @@ def train_american(epochs: int = 1500):
     sigma = 0.20     # Volatility
     K = 100.0        # Strike price
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+    print(f"[+] Execution Device: {device} ({gpu_name})")
+
     # 1. Collocation Points in Dimensionless Domain (m, tau)
     N_pde = 2500
-    m_pde = torch.rand(N_pde, 1) * 1.20 + 0.40       # Moneyness m in [0.40, 1.60]
-    tau_pde = torch.rand(N_pde, 1) * 1.00            # tau in [0.00, 1.00 year]
+    m_pde = (torch.rand(N_pde, 1, device=device) * 1.20 + 0.40)       # Moneyness m in [0.40, 1.60]
+    tau_pde = (torch.rand(N_pde, 1, device=device) * 1.00)            # tau in [0.00, 1.00 year]
 
     # 2. Initial Condition Domain (tau = 0)
     N_ic = 800
-    m_ic = torch.rand(N_ic, 1) * 1.20 + 0.40
-    tau_ic = torch.zeros(N_ic, 1)
+    m_ic = (torch.rand(N_ic, 1, device=device) * 1.20 + 0.40)
+    tau_ic = torch.zeros(N_ic, 1, device=device)
     u_ic_target = torch.relu(1.0 - m_ic)             # American Put Payoff: max(1 - m, 0)
 
     # 3. Boundary Conditions
     # Deep OTM boundary (m = 1.70) -> Put value u = 0
     N_bc = 300
-    m_bc_hi = torch.ones(N_bc, 1) * 1.70
-    tau_bc_hi = torch.rand(N_bc, 1) * 1.00
-    u_bc_hi_target = torch.zeros(N_bc, 1)
+    m_bc_hi = torch.ones(N_bc, 1, device=device) * 1.70
+    tau_bc_hi = (torch.rand(N_bc, 1, device=device) * 1.00)
+    u_bc_hi_target = torch.zeros(N_bc, 1, device=device)
 
     # Deep ITM boundary (m = 0.30) -> Put value u = 1 - m
-    m_bc_lo = torch.ones(N_bc, 1) * 0.30
-    tau_bc_lo = torch.rand(N_bc, 1) * 1.00
+    m_bc_lo = torch.ones(N_bc, 1, device=device) * 0.30
+    tau_bc_lo = (torch.rand(N_bc, 1, device=device) * 1.00)
     u_bc_lo_target = 1.0 - m_bc_lo
 
-    model = AmericanOptionPINN(hidden_dim=128)
+    model = AmericanOptionPINN(hidden_dim=128).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1.5e-3, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
 
-    print(f"[INFO] Training American Option PINN ({epochs} Epochs)...")
+    print(f"[INFO] Training American Option PINN on {gpu_name} ({epochs} Epochs)...")
     t0 = time.time()
     loss_history = []
     pde_history = []
@@ -387,8 +395,8 @@ def train_american(epochs: int = 1500):
 
         # PINN prediction with intrinsic value floor
         with torch.no_grad():
-            m_t = torch.tensor([[s / K]], dtype=torch.float32)
-            tau_t = torch.tensor([[tau_eval]], dtype=torch.float32)
+            m_t = torch.tensor([[s / K]], dtype=torch.float32, device=device)
+            tau_t = torch.tensor([[tau_eval]], dtype=torch.float32, device=device)
             u_norm = model(m_t, tau_t).item()
             p_am_pinn = max(K - s, u_norm * K)
             pinn_am_prices.append(p_am_pinn)

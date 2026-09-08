@@ -17,6 +17,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 # Ensure repository root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# Device Selection (CUDA on NVIDIA GTX 1070 if available)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # Default metadata for top tickers (Spot and Realized Vol)
 TICKER_DEFAULTS = {
     "AAPL":  {"spot": 220.0, "vol": 0.251},
@@ -69,19 +72,19 @@ def predict_universal_option(
     if sigma is None:
         sigma = meta["vol"]
 
-    model = UniversalMultiAssetPINN(hidden_dim=128)
+    model = UniversalMultiAssetPINN(hidden_dim=128).to(DEVICE)
     if os.path.exists(weights_path):
-        model.load_state_dict(torch.load(weights_path, map_location=torch.device("cpu")))
-        print(f"[OK] Loaded pre-trained Universal PINN weights from '{weights_path}'")
+        model.load_state_dict(torch.load(weights_path, map_location=DEVICE))
+        print(f"[OK] Loaded pre-trained Universal PINN weights from '{weights_path}' (Device: {DEVICE})")
     else:
         print(f"[WARN] Weights file '{weights_path}' not found. Falling back to single-asset weights if available.")
 
     model.eval()
 
     m_val = S / K
-    m_t = torch.tensor([[m_val]], dtype=torch.float32, requires_grad=True)
-    tau_t = torch.tensor([[tau]], dtype=torch.float32, requires_grad=True)
-    sigma_t = torch.tensor([[sigma]], dtype=torch.float32, requires_grad=True)
+    m_t = torch.tensor([[m_val]], dtype=torch.float32, device=DEVICE, requires_grad=True)
+    tau_t = torch.tensor([[tau]], dtype=torch.float32, device=DEVICE, requires_grad=True)
+    sigma_t = torch.tensor([[sigma]], dtype=torch.float32, device=DEVICE, requires_grad=True)
 
     v = model(m_t, tau_t, sigma_t)
     dv_dm = torch.autograd.grad(v, m_t, grad_outputs=torch.ones_like(v), create_graph=True)[0]
@@ -121,17 +124,17 @@ def predict_heston_option(
     2D Heston Stochastic Volatility PINN inference.
     """
     from src.heston_pinn import HestonPINN
-    model = HestonPINN(hidden_dim=128)
+    model = HestonPINN(hidden_dim=128).to(DEVICE)
     if os.path.exists(weights_path):
-        model.load_state_dict(torch.load(weights_path, map_location=torch.device("cpu")))
-        print(f"[OK] Loaded Heston PINN weights from '{weights_path}'")
+        model.load_state_dict(torch.load(weights_path, map_location=DEVICE))
+        print(f"[OK] Loaded Heston PINN weights from '{weights_path}' (Device: {DEVICE})")
     else:
         print(f"[WARN] Weights file '{weights_path}' not found.")
 
     model.eval()
-    m_t = torch.tensor([[S / K]], dtype=torch.float32, requires_grad=True)
-    v_t = torch.tensor([[v]], dtype=torch.float32, requires_grad=True)
-    tau_t = torch.tensor([[tau]], dtype=torch.float32, requires_grad=True)
+    m_t = torch.tensor([[S / K]], dtype=torch.float32, device=DEVICE, requires_grad=True)
+    v_t = torch.tensor([[v]], dtype=torch.float32, device=DEVICE, requires_grad=True)
+    tau_t = torch.tensor([[tau]], dtype=torch.float32, device=DEVICE, requires_grad=True)
 
     u = model(m_t, v_t, tau_t)
     du_dm = torch.autograd.grad(u, m_t, grad_outputs=torch.ones_like(u), create_graph=True)[0]
@@ -161,16 +164,16 @@ def predict_american_put(
     American Put Option Free-Boundary PINN inference.
     """
     from src.american_pinn import AmericanOptionPINN, crr_american_put, crr_european_put
-    model = AmericanOptionPINN(hidden_dim=128)
+    model = AmericanOptionPINN(hidden_dim=128).to(DEVICE)
     if os.path.exists(weights_path):
-        model.load_state_dict(torch.load(weights_path, map_location=torch.device("cpu")))
-        print(f"[OK] Loaded American Option PINN weights from '{weights_path}'")
+        model.load_state_dict(torch.load(weights_path, map_location=DEVICE))
+        print(f"[OK] Loaded American Option PINN weights from '{weights_path}' (Device: {DEVICE})")
     else:
         print(f"[WARN] Weights file '{weights_path}' not found.")
 
     model.eval()
-    m_t = torch.tensor([[S / K]], dtype=torch.float32, requires_grad=True)
-    tau_t = torch.tensor([[tau]], dtype=torch.float32, requires_grad=True)
+    m_t = torch.tensor([[S / K]], dtype=torch.float32, device=DEVICE, requires_grad=True)
+    tau_t = torch.tensor([[tau]], dtype=torch.float32, device=DEVICE, requires_grad=True)
 
     u = model(m_t, tau_t)
     du_dm = torch.autograd.grad(u, m_t, grad_outputs=torch.ones_like(u), create_graph=True)[0]
