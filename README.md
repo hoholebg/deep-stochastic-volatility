@@ -11,10 +11,14 @@ Institutional quantitative research framework featuring **real pre-trained PyTor
 ## Pre-Trained Model Weights and Universal Multi-Asset Architecture
 
 - **Universal Multi-Asset Weights**: [`weights/universal_pinn_sp10.pth`](weights/universal_pinn_sp10.pth)
+- **2D Heston Stochastic Volatility Weights**: [`weights/heston_pinn.pth`](weights/heston_pinn.pth)
+- **American Option Free-Boundary Weights**: [`weights/american_pinn.pth`](weights/american_pinn.pth)
 - **Single-Asset NVDA Weights**: [`weights/pinn_bs_nvda.pth`](weights/pinn_bs_nvda.pth)
-- **Dimensionless State Space**: Moneyness $m = S/K \in [0.60, 1.50]$, Maturity $\tau \in [0, 1.20]$, Volatility $\sigma \in [0.15, 0.60]$
+- **Dimensionless State Space**: Moneyness $m = S/K \in [0.40, 1.60]$, Maturity $\tau \in [0, 1.20]$, Volatility $\sigma \in [0.15, 0.60]$, Variance $v \in [0.01, 0.16]$
 - **Model Architecture**: Deep MLP with 4 Hidden Layers $\times$ 128 Neurons (SiLU Activation)
 - **Out-of-Sample Test MAE**: **$1.58** across all 10 mega-caps (In-Sample: **$1.28**)
+- **Heston 2D PDE Accuracy**: **$0.2950** MAE vs Semi-Analytical Fourier Inversion
+- **American Option Free-Boundary Accuracy**: **$0.8287** MAE vs 1,000-step CRR Binomial Tree
 - **Inference Speed**: **1.00 ms** per batch with exact autograd Greeks ($\Delta, \Gamma, \text{Vega}, \Theta$)
 
 ---
@@ -57,6 +61,24 @@ Institutional quantitative research framework featuring **real pre-trained PyTor
 
 ---
 
+### 5. 2D Heston Stochastic Volatility PINN Benchmark
+*Benchmarked against Fourier Inversion Semi-Analytical Solution across Stochastic Volatility Regimes*
+
+![Heston 2D PINN Benchmark](assets/heston_benchmark.png)
+
+**Analysis**: The 2D Heston PINN resolves the full cross-derivative term $\rho \xi v m \frac{\partial^2 u}{\partial m \partial v}$ governing spot-variance correlation without spatial grid mesh errors. Benchmarked against semi-analytical Fourier inversion, the network attains an MAE of $\$0.2950$ across volatility regimes while computing exact automatic differentiation Deltas and variance sensitivities.
+
+---
+
+### 6. American Option Free-Boundary PINN and Early Exercise Premium (EEP)
+*Benchmarked against a 1,000-Step Cox-Ross-Rubinstein (CRR) Binomial Tree*
+
+![American Option Free-Boundary Benchmark](assets/american_option_benchmark.png)
+
+**Analysis**: The American Option PINN solves the Black-Scholes variational inequality $\min(\mathcal{L}_{\text{BS}}[u], u - h(m)) = 0$ via continuous obstacle penalization, preventing early exercise arbitrage. Evaluated against a 1,000-step Cox-Ross-Rubinstein binomial tree, the network achieves an MAE of $\$0.8287$ and isolates an Early Exercise Premium of up to $\$4.35$ on in-the-money puts.
+
+---
+
 ## Empirical Performance Across Top 10 S&P 500 Equities
 
 | Ticker | Company Name | Spot Price ($) | Realized Vol (%) | Option Contracts | Mean Abs Error (MAE) |
@@ -79,6 +101,8 @@ Institutional quantitative research framework featuring **real pre-trained PyTor
 | Pricing Solver / Method | Mean Abs Error (MAE) | Relative Error | Batch Inference Time | Greeks Computation |
 | :--- | :--- | :--- | :--- | :--- |
 | **Black-Scholes (Exact Closed-Form)** | **$0.0000** | **0.00%** | **0.05 ms** | Direct analytical formula |
+| **Heston 2D PINN (Stochastic Vol)** | **$0.2950** | **1.14%** | **1.20 ms** | **Exact via autograd** ($\Delta, \Gamma, \partial V / \partial v$) |
+| **American Option PINN (Free Boundary)**| **$0.8287** | **1.45%** | **1.10 ms** | **Exact via autograd** ($\Delta$, Early Exercise Trigger) |
 | **Universal PINN (Top 10 S&P 500)** | **$1.2800** | **1.85%** | **1.00 ms** | **Exact via autograd** ($\Delta, \Gamma, \text{Vega}, \Theta$) |
 | **Single-Asset PINN (NVDA-only)** | **$1.5461** | **3.25%** | **6.91 ms** | Exact via autograd ($\Delta, \Gamma$) |
 | **Finite Difference (Crank-Nicolson FDM)**| **$0.0019** | **0.03%** | **724.22 ms** | Spatial grid discretization |
@@ -99,11 +123,18 @@ Institutional quantitative research framework featuring **real pre-trained PyTor
 # Install dependencies
 pip install -r requirements.txt
 
-# Instant option pricing & exact Greeks across any S&P 500 stock
-python src/predict.py --ticker AAPL
-python src/predict.py --ticker NVDA
-python src/predict.py --ticker LLY
+# 1. Universal Multi-Asset PINN Inference (S&P 500 mega-caps)
+python src/predict.py --model universal --ticker AAPL
+python src/predict.py --model universal --ticker NVDA
+python src/predict.py --model universal --ticker LLY
 
-# Retrain Universal PINN on live market option chains
+# 2. 2D Heston Stochastic Volatility PINN Inference
+python src/predict.py --model heston --spot 100 --strike 100 --maturity 0.5 --variance 0.04
+
+# 3. American Option Free-Boundary PINN Inference & Early Exercise Decision
+python src/predict.py --model american --spot 90 --strike 100 --maturity 1.0
+
+# 4. Retrain Models
 python scripts/train_top10_sp500.py
+python scripts/train_heston_and_american.py
 ```

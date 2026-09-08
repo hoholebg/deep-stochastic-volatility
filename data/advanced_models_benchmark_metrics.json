@@ -1,0 +1,18 @@
+{
+  "heston_stochastic_volatility": {
+    "model": "Heston 2D PINN",
+    "mae": 0.2950147183498679,
+    "rmse": 0.3557717755802877,
+    "max_error": 0.6419768928272838,
+    "training_time_seconds": 141.63375735282898
+  },
+  "american_option_free_boundary": {
+    "model": "American Option PINN",
+    "mae": 0.8286854677358487,
+    "rmse": 1.1136916575060563,
+    "max_error": 1.9136602123682587,
+    "max_eep": 4.349723971472173,
+    "training_time_seconds": 87.12079453468323
+  },
+  "total_runtime_seconds": 236.623699426651
+}

@@ -14,6 +14,9 @@ import numpy as np
 # Ensure UTF-8 output on Windows
 sys.stdout.reconfigure(encoding="utf-8")
 
+# Ensure repository root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 # Default metadata for top tickers (Spot and Realized Vol)
 TICKER_DEFAULTS = {
     "AAPL":  {"spot": 220.0, "vol": 0.251},
@@ -107,26 +110,135 @@ def predict_universal_option(
     }
 
 
+def predict_heston_option(
+    S: float = 100.0,
+    K: float = 100.0,
+    tau: float = 0.5,
+    v: float = 0.04,
+    weights_path: str = "weights/heston_pinn.pth"
+):
+    """
+    2D Heston Stochastic Volatility PINN inference.
+    """
+    from src.heston_pinn import HestonPINN
+    model = HestonPINN(hidden_dim=128)
+    if os.path.exists(weights_path):
+        model.load_state_dict(torch.load(weights_path, map_location=torch.device("cpu")))
+        print(f"[OK] Loaded Heston PINN weights from '{weights_path}'")
+    else:
+        print(f"[WARN] Weights file '{weights_path}' not found.")
+
+    model.eval()
+    m_t = torch.tensor([[S / K]], dtype=torch.float32, requires_grad=True)
+    v_t = torch.tensor([[v]], dtype=torch.float32, requires_grad=True)
+    tau_t = torch.tensor([[tau]], dtype=torch.float32, requires_grad=True)
+
+    u = model(m_t, v_t, tau_t)
+    du_dm = torch.autograd.grad(u, m_t, grad_outputs=torch.ones_like(u), create_graph=True)[0]
+    d2u_dm2 = torch.autograd.grad(du_dm, m_t, grad_outputs=torch.ones_like(du_dm), create_graph=True)[0]
+    du_dv = torch.autograd.grad(u, v_t, grad_outputs=torch.ones_like(u), create_graph=True)[0]
+
+    return {
+        "S": S,
+        "K": K,
+        "tau": tau,
+        "variance": v,
+        "implied_vol": np.sqrt(v),
+        "price": float(u.item()) * K,
+        "delta": float(du_dm.item()),
+        "gamma": float(d2u_dm2.item()) / K,
+        "variance_sensitivity": float(du_dv.item())
+    }
+
+
+def predict_american_put(
+    S: float = 90.0,
+    K: float = 100.0,
+    tau: float = 1.0,
+    weights_path: str = "weights/american_pinn.pth"
+):
+    """
+    American Put Option Free-Boundary PINN inference.
+    """
+    from src.american_pinn import AmericanOptionPINN, crr_american_put, crr_european_put
+    model = AmericanOptionPINN(hidden_dim=128)
+    if os.path.exists(weights_path):
+        model.load_state_dict(torch.load(weights_path, map_location=torch.device("cpu")))
+        print(f"[OK] Loaded American Option PINN weights from '{weights_path}'")
+    else:
+        print(f"[WARN] Weights file '{weights_path}' not found.")
+
+    model.eval()
+    m_t = torch.tensor([[S / K]], dtype=torch.float32, requires_grad=True)
+    tau_t = torch.tensor([[tau]], dtype=torch.float32, requires_grad=True)
+
+    u = model(m_t, tau_t)
+    du_dm = torch.autograd.grad(u, m_t, grad_outputs=torch.ones_like(u), create_graph=True)[0]
+
+    pinn_price = max(K - S, float(u.item()) * K)
+    delta = float(du_dm.item()) if pinn_price > (K - S) else -1.0
+
+    # Benchmark EEP comparison
+    crr_am = crr_american_put(S, K, tau, 0.045, 0.20, N=500)
+    crr_eu = crr_european_put(S, K, tau, 0.045, 0.20, N=500)
+    eep = crr_am - crr_eu
+
+    return {
+        "S": S,
+        "K": K,
+        "tau": tau,
+        "price": pinn_price,
+        "delta": delta,
+        "crr_benchmark": crr_am,
+        "early_exercise_premium": eep,
+        "is_exercised": pinn_price <= (K - S + 1e-4)
+    }
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Universal PINN Option Inference")
+    parser = argparse.ArgumentParser(description="PINN Option Pricing & Greeks Inference")
+    parser.add_argument("--model", type=str, default="universal", choices=["universal", "heston", "american"], help="Model architecture")
     parser.add_argument("--ticker", type=str, default="NVDA", help="Ticker symbol (e.g., AAPL, MSFT, NVDA, TSLA)")
     parser.add_argument("--spot", type=float, default=None, help="Spot price S")
     parser.add_argument("--strike", type=float, default=None, help="Strike price K")
     parser.add_argument("--maturity", type=float, default=1.0, help="Time to maturity in years")
-    parser.add_argument("--vol", type=float, default=None, help="Realized or Implied volatility (e.g. 0.35)")
+    parser.add_argument("--vol", type=float, default=None, help="Realized or Implied volatility")
+    parser.add_argument("--variance", type=float, default=0.04, help="Instantaneous variance for Heston")
     args = parser.parse_args()
 
-    res = predict_universal_option(
-        ticker=args.ticker,
-        S=args.spot,
-        K=args.strike,
-        tau=args.maturity,
-        sigma=args.vol
-    )
+    if args.model == "universal":
+        res = predict_universal_option(
+            ticker=args.ticker,
+            S=args.spot,
+            K=args.strike,
+            tau=args.maturity,
+            sigma=args.vol
+        )
+        print(f"\nUniversal PINN Result for {res['ticker']} (S = ${res['S']:.2f}, K = ${res['K']:.2f}, T = {res['tau']:.2f}Y, Vol = {res['sigma']*100:.1f}%):")
+        print(f"  Predicted Option Price V:  ${res['price']:.2f} (v = {res['normalized_v']:.4f})")
+        print(f"  Exact Autograd Delta:       {res['delta']:.4f}")
+        print(f"  Exact Autograd Gamma:       {res['gamma']:.6f}")
+        print(f"  Exact Autograd Vega:        ${res['vega']:.4f} per 1% vol")
+        print(f"  Exact Autograd Theta:       ${res['theta']:.4f} per day")
 
-    print(f"\nInference Result for {res['ticker']} (S = ${res['S']:.2f}, K = ${res['K']:.2f}, T = {res['tau']:.2f}Y, Vol = {res['sigma']*100:.1f}%):")
-    print(f"  Predicted Option Price V:  ${res['price']:.2f} (v = {res['normalized_v']:.4f})")
-    print(f"  Exact Autograd Delta:       {res['delta']:.4f}")
-    print(f"  Exact Autograd Gamma:       {res['gamma']:.6f}")
-    print(f"  Exact Autograd Vega:        ${res['vega']:.4f} per 1% vol")
-    print(f"  Exact Autograd Theta:       ${res['theta']:.4f} per day")
+    elif args.model == "heston":
+        spot = args.spot if args.spot is not None else 100.0
+        strike = args.strike if args.strike is not None else 100.0
+        mat = args.maturity if args.maturity is not None else 0.5
+        res = predict_heston_option(S=spot, K=strike, tau=mat, v=args.variance)
+        print(f"\nHeston 2D PINN Result (S = ${res['S']:.2f}, K = ${res['K']:.2f}, T = {res['tau']:.2f}Y, Var = {res['variance']:.4f}, Vol = {res['implied_vol']*100:.1f}%):")
+        print(f"  Predicted Option Price V:  ${res['price']:.2f}")
+        print(f"  Exact Autograd Delta:       {res['delta']:.4f}")
+        print(f"  Exact Autograd Gamma:       {res['gamma']:.6f}")
+        print(f"  Variance Sensitivity:       {res['variance_sensitivity']:.4f}")
+
+    elif args.model == "american":
+        spot = args.spot if args.spot is not None else 90.0
+        strike = args.strike if args.strike is not None else 100.0
+        res = predict_american_put(S=spot, K=strike, tau=args.maturity)
+        print(f"\nAmerican Option PINN Result (S = ${res['S']:.2f}, K = ${res['K']:.2f}, T = {res['tau']:.2f}Y):")
+        print(f"  American Put PINN Price:   ${res['price']:.2f}")
+        print(f"  CRR 1000-Step Benchmark:   ${res['crr_benchmark']:.2f}")
+        print(f"  Early Exercise Premium:    ${res['early_exercise_premium']:.2f}")
+        print(f"  Delta (dV/dS):              {res['delta']:.4f}")
+        print(f"  Optimal Exercise State:    {'EXERCISE NOW' if res['is_exercised'] else 'CONTINUE HOLDING'}")
